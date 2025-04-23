@@ -36,8 +36,7 @@
             justify-content: center;
             min-height: 100vh;
             padding: 20px;
-            font-family: Arial, sans-serif;
-            color: var(--text-primary);
+           /month; color: var(--text-primary);
         }
 
         .chat-container {
@@ -183,6 +182,16 @@
             color: var(--text-primary);
         }
 
+        .translation-box {
+            padding: 15px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            background-color: var(--bg-darker);
+            font-size: 16px;
+            line-height: 1.6;
+            color: var(--text-primary);
+        }
+
         .status {
             padding: 12px 15px;
             background-color: var(--bg-darker);
@@ -308,10 +317,13 @@
                 <button id="suggestBtn" class="icon-button btn-primary" title="Có phải bạn muốn nói là:" disabled>
                     <i class="fas fa-lightbulb"></i>
                 </button>
+                <button id="speakBtn" class="icon-button btn-primary" title="Phát âm thanh" disabled>
+                    <i class="fas fa-volume-up"></i>
+                </button>
             </div>
 
             <div class="controls-group">
-                <button id="saveBtn" class="icon-button btn-secondary" title="Lưu vào lịch sử" disabled>
+                <button id="saveBtn" class="icon-button btnkbd; btn-secondary" title="Lưu vào lịch sử" disabled>
                     <i class="fas fa-save"></i>
                 </button>
                 <button id="clearBtn" class="icon-button btn-danger" title="Xóa tất cả">
@@ -327,6 +339,10 @@
 
         <textarea id="editableText" class="text-area" placeholder="Tin nhắn của bạn sẽ xuất hiện ở đây..."></textarea>
 
+        <div id="translation" class="translation-box hidden">
+            <div class="message" id="translation-text"></div>
+        </div>
+
         <div id="result" class="result-box hidden">
             <div class="message" id="message-text"></div>
         </div>
@@ -336,12 +352,10 @@
             <span>Đang xử lý...</span>
         </div>
 
-        <div id="corre välja
-
-ctions" class="suggestions hidden">
+        <div id="corrections" class="suggestions hidden">
             <div class="suggestions-title">
                 <i class="fas fa-lightbulb"></i>
-                <span>Có phải bạn muốn nói là:</span>
+                <span id="suggestions-title-text">Có phải bạn muốn nói là:</span>
             </div>
             <div id="suggestions"></div>
         </div>
@@ -353,15 +367,19 @@ ctions" class="suggestions hidden">
             const elements = {
                 micBtn: document.getElementById('micBtn'),
                 suggestBtn: document.getElementById('suggestBtn'),
+                speakBtn: document.getElementById('speakBtn'),
                 saveBtn: document.getElementById('saveBtn'),
                 clearBtn: document.getElementById('clearBtn'),
                 tabs: document.querySelectorAll('.tab'),
                 messageText: document.getElementById('message-text'),
+                translationText: document.getElementById('translation-text'),
                 editableText: document.getElementById('editableText'),
                 status: document.getElementById('status'),
                 suggestions: document.getElementById('suggestions'),
+                suggestionsTitle: document.getElementById('suggestions-title-text'),
                 loading: document.getElementById('loading'),
                 resultBox: document.getElementById('result'),
+                translationBox: document.getElementById('translation'),
                 correctionsBox: document.getElementById('corrections')
             };
 
@@ -373,6 +391,7 @@ ctions" class="suggestions hidden">
             // Toggle action buttons
             function toggleActionButtons(enabled) {
                 elements.suggestBtn.disabled = !enabled;
+                elements.speakBtn.disabled = !enabled;
                 elements.saveBtn.disabled = !enabled;
             }
 
@@ -392,15 +411,27 @@ ctions" class="suggestions hidden">
                 return response.json();
             }
 
+            // Translate text to Japanese
+            async function translateToJapanese(text) {
+                const promptText = `
+                    Dịch câu tiếng Việt sau sang tiếng Nhật: "${text}"
+                    Trả lời chỉ với bản dịch tiếng Nhật, không thêm giải thích hoặc định dạng khác.
+                `;
+                const response = await fetchFromGemini(promptText);
+                return response.candidates[0].content.parts[0].text.trim();
+            }
+
             // Get improved text and suggestions
             async function getImprovedTextAndSuggestions(text, language) {
                 const promptText = `
-                    Bạn là một trợ lý trò chuyện. Phân tích câu nói sau (${language === 'ja-JP' ? 'tiếng Nhật' : 'tiếng Việt'}) và đề xuất 2-3 cách diễn đạt tự nhiên hơn, phù hợp để trò chuyện với người nước ngoài:
+                    Bạn là một trợ lý trò chuyện. Phân tích câu nói sau (${language === 'ja-JP' ? 'tiếng Nhật' : 'tiếng Việt'}) và đề xuất 2-3 cách diễn đạt tự nhiên hơn, phù hợp để trò chuyện với người nước ngoài. 
                     Câu nói: "${text}"
+                    Tất cả câu đã cải thiện và gợi ý phải được trả về bằng tiếng Việt, bất kể ngôn ngữ đầu vào. 
+                    Nếu câu đầu vào là tiếng Nhật, hãy dịch sang tiếng Việt trước khi cải thiện và tạo gợi ý.
                     Trả lời theo định dạng JSON:
                     {
-                      "corrected_text": "câu đã cải thiện",
-                      "suggestions": ["gợi ý 1", "gợi ý 2", "gợi ý 3"]
+                      "corrected_text": "câu đã cải thiện bằng tiếng Việt",
+                      "suggestions": ["gợi ý 1 bằng tiếng Việt", "gợi ý 2 bằng tiếng Việt", "gợi ý 3 bằng tiếng Việt"]
                     }
                 `;
                 const response = await fetchFromGemini(promptText);
@@ -410,20 +441,91 @@ ctions" class="suggestions hidden">
                 return JSON.parse(jsonMatch[0]);
             }
 
+            // Improved language detection for Vietnamese
+            function isVietnamese(text) {
+                const vietnameseRegex = /[àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵ]/i;
+                if (vietnameseRegex.test(text)) return true;
+
+                const commonVietnameseWords = [
+                    'toi', 'ban', 'la', 'cua', 'di', 've', 'va', 'voi', 'cho', 'tu',
+                    'den', 'trong', 'ngoai', 'len', 'xuong', 'giua', 'tai', 'nho', 'lon', 'rat'
+                ];
+                const words = text.toLowerCase().split(/\s+/);
+                return words.some(word => commonVietnameseWords.includes(word));
+            }
+
+            // Display translation
+            async function displayTranslation(text) {
+                if (!text || currentLang === 'ja-JP') {
+                    elements.translationBox.classList.add('hidden');
+                    return;
+                }
+
+                elements.loading.classList.remove('hidden');
+                try {
+                    const translation = await translateToJapanese(text);
+                    elements.translationText.textContent = translation;
+                    elements.translationBox.classList.remove('hidden');
+                } catch (error) {
+                    elements.status.innerHTML = `<i class="fas fa-exclamation-triangle"></i><span>Lỗi dịch: ${error.message}</span>`;
+                    elements.translationBox.classList.add('hidden');
+                } finally {
+                    elements.loading.classList.add('hidden');
+                }
+            }
+
+            // Text-to-speech
+            function speakText() {
+                const text = currentLang === 'vi-VN'
+					? elements.translationText.textContent.trim()
+					: elements.editableText.value.trim();
+                if (!text) {
+                    elements.status.innerHTML = '<i class="fas fa-exclamation-circle"></i><span>Không có văn bản để phát âm</span>';
+                    return;
+                }
+
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = currentLang === 'vi-VN' ? 'ja-JP' : currentLang;
+                utterance.rate = 1;
+                utterance.pitch = 1;
+                speechSynthesis.cancel(); // Clear any previous speech
+                speechSynthesis.speak(utterance);
+
+                elements.status.innerHTML = '<i class="fas fa-volume-up"></i><span>Đang phát âm...</span>';
+                utterance.onend = () => {
+                    elements.status.innerHTML = '<i class="fas fa-info-circle"></i><span>Sẵn sàng</span>';
+                };
+            }
+
             // Display suggestions
             function displaySuggestions(suggestions) {
-                elements.suggestions.innerHTML = suggestions.length === 0
-                    ? '<p>Không có gợi ý nào.</p>'
-                    : `<ul>${suggestions.map(s => `<li>${s}</li>`).join('')}</ul>`;
+                elements.suggestionsTitle.textContent = currentLang === 'ja-JP'
+                    ? 'Có thể anh ấy muốn nói là:'
+                    : 'Có phải bạn muốn nói là:';
+
+                const validatedSuggestions = suggestions.filter(s => isVietnamese(s));
+                if (validatedSuggestions.length === 0 && suggestions.length > 0) {
+                    elements.status.innerHTML = '<i class="fas fa-exclamation-circle"></i><span>Gợi ý không phải tiếng Việt, vui lòng thử lại.</span>';
+                    elements.suggestions.innerHTML = '<p>Không có gợi ý hợp lệ.</p>';
+                } else {
+                    elements.suggestions.innerHTML = validatedSuggestions.length === 0
+                        ? '<p>Không có gợi ý nào.</p>'
+                        : `<ul>${validatedSuggestions.map(s => `<li>${s}</li>`).join('')}</ul>`;
+                }
 
                 elements.suggestions.querySelectorAll('li').forEach(li => {
                     li.addEventListener('click', () => {
                         elements.editableText.value = li.textContent;
                         toggleActionButtons(true);
+                        displayTranslation(li.textContent);
                     });
                 });
 
-                elements.correctionsBox.classList.toggle('hidden', suggestions.length === 0);
+                if (elements.correctionsBox) {
+                    elements.correctionsBox.classList.toggle('hidden', validatedSuggestions.length === 0);
+                } else {
+                    console.warn('Phần tử correctionsBox không tồn tại');
+                }
             }
 
             // Suggest improved expressions
@@ -439,8 +541,13 @@ ctions" class="suggestions hidden">
 
                 try {
                     const result = await getImprovedTextAndSuggestions(text, currentLang);
+                    if (!isVietnamese(result.corrected_text)) {
+                        elements.status.innerHTML = '<i class="fas fa-exclamation-circle"></i><span>Câu cải thiện không phải tiếng Việt, vui lòng thử lại.</span>';
+                        return;
+                    }
                     elements.editableText.value = result.corrected_text || text;
                     displaySuggestions(result.suggestions || []);
+                    await displayTranslation(result.corrected_text);
                 } catch (error) {
                     elements.status.innerHTML = `<i class="fas fa-exclamation-triangle"></i><span>Lỗi: ${error.message}</span>`;
                 } finally {
@@ -453,8 +560,10 @@ ctions" class="suggestions hidden">
             function clearAll() {
                 elements.editableText.value = '';
                 elements.messageText.textContent = '';
+                elements.translationText.textContent = '';
                 elements.suggestions.innerHTML = '';
                 elements.resultBox.classList.add('hidden');
+                elements.translationBox.classList.add('hidden');
                 elements.correctionsBox.classList.add('hidden');
                 toggleActionButtons(false);
                 elements.status.innerHTML = '<i class="fas fa-info-circle"></i><span>Sẵn sàng</span>';
@@ -474,7 +583,7 @@ ctions" class="suggestions hidden">
                 recognition.continuous = true;
                 recognition.maxAlternatives = 1;
 
-                recognition.onresult = event => {
+                recognition.onresult = async event => {
                     const result = event.results[event.results.length - 1];
                     const transcript = result[0].transcript;
 
@@ -484,6 +593,7 @@ ctions" class="suggestions hidden">
                         elements.messageText.textContent = '';
                         elements.resultBox.classList.add('hidden');
                         toggleActionButtons(true);
+                        await displayTranslation(elements.editableText.value);
                     } else {
                         elements.messageText.textContent = transcript;
                         elements.resultBox.classList.remove('hidden');
@@ -499,7 +609,7 @@ ctions" class="suggestions hidden">
                 };
 
                 recognition.onend = () => {
-                    isRecording = false;
+                    isRecording =-false;
                     elements.status.innerHTML = '<i class="fas fa-check-circle"></i><span>Đã dừng ghi âm</span>';
                     elements.micBtn.innerHTML = '<i class="fas fa-microphone"></i>';
                     elements.micBtn.title = 'Bắt đầu ghi âm';
@@ -536,12 +646,14 @@ ctions" class="suggestions hidden">
                         if (wasRecording) setTimeout(() => recognition.start(), 100);
                     }
                     elements.status.innerHTML = `<i class="fas fa-info-circle"></i><span>Đã chuyển sang ${currentLang === 'vi-VN' ? 'Tiếng Việt' : 'Tiếng Nhật'}</span>`;
+                    displayTranslation(elements.editableText.value);
                 });
             });
 
             // Event listeners
             elements.editableText.addEventListener('input', () => {
                 toggleActionButtons(!!elements.editableText.value.trim());
+                displayTranslation(elements.editableText.value);
             });
 
             elements.micBtn.addEventListener('click', () => {
@@ -551,6 +663,8 @@ ctions" class="suggestions hidden">
             });
 
             elements.suggestBtn.addEventListener('click', suggestImprovedExpression);
+
+            elements.speakBtn.addEventListener('click', speakText);
 
             elements.saveBtn.addEventListener('click', () => {
                 const textToSave = elements.editableText.value.trim();
@@ -574,5 +688,6 @@ ctions" class="suggestions hidden">
             setupRecognition();
         });
     </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'935022effe97457e',t:'MTc0NTQ0MDQxMi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
 </body>
 </html>
