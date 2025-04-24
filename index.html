@@ -573,10 +573,10 @@
             // Translate text based on current language
             async function translateText(text) {
                 if (!text) return '';
+		    
+		// Thêm delay 1-2 giây giữa các request
+		await new Promise(resolve => setTimeout(resolve, 3500));
 				
-				// Thêm delay 1-2 giây giữa các request
-				await new Promise(resolve => setTimeout(resolve, 1500));
-                
                 let promptText;
                 if (currentLang === 'vi-VN') {
                     promptText = `
