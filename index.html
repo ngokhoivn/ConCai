@@ -541,6 +541,7 @@
             // Buffer for interim speech recognition results
             let interimBuffer = '';
             let finalBuffer = '';
+			let translationTimeout = null;
 
             // Toggle action buttons
             function toggleActionButtons(enabled) {
@@ -573,10 +574,10 @@
             // Translate text based on current language
             async function translateText(text) {
                 if (!text) return '';
-		    
-		// Thêm delay 1-2 giây giữa các request
-		await new Promise(resolve => setTimeout(resolve, 4500));
 				
+				// Thêm delay 1-2 giây giữa các request
+				await new Promise(resolve => setTimeout(resolve, 3500));
+                
                 let promptText;
                 if (currentLang === 'vi-VN') {
                     promptText = `
@@ -819,10 +820,14 @@
                         
                         // Enable action buttons
                         toggleActionButtons(true);
-                        
-                        // Translate the final text
-                        await displayTranslation(finalBuffer);
-                    } else {
+						
+						if (translationTimeout) clearTimeout(translationTimeout); // hủy nếu có timer cũ
+						
+						translationTimeout = setTimeout(() => {
+							displayTranslation(finalBuffer); // chỉ dịch sau khi không có gì mới trong 2 giây
+						}, 2000);
+						
+					} else {
                         // For interim results, show in the interim result box
                         interimBuffer = transcript;
                         elements.messageText.textContent = interimBuffer;
